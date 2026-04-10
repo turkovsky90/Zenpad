@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Zenomat</title>
+    
+    <link rel="icon" type="image/png" href="https://flaticon.com">
+    <link rel="manifest" href='data:application/manifest+json,{"name":"Zenomat","short_name":"Zenomat","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#1A1C1E","icons":[{"src":"https://flaticon.com","sizes":"512x512","type":"image/png"}]}'>
+
+    <style>
+        :root { --primary: #D1E1FF; --surface: #1A1C1E; --on-surface: #E2E2E6; --outline: #44474E; }
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #000; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; }
+        canvas { display: block; }
+        
+        .nav-bar { 
+            position: absolute; 
+            background: var(--surface); 
+            display: flex; 
+            z-index: 10; 
+            box-sizing: border-box;
+        }
+
+        @media (orientation: portrait) {
+            .nav-bar { 
+                bottom: 0; left: 0; width: 100%; 
+                flex-direction: row; justify-content: center; 
+                padding: 12px 0 calc(12px + env(safe-area-inset-bottom)) 0;
+                border: none;
+                border-top: 1px solid var(--outline);
+            }
+        }
+
+        @media (orientation: landscape) {
+            .nav-bar { 
+                top: 0; right: 0; height: 100%; 
+                width: 80px; flex-direction: column; 
+                justify-content: center; align-items: center; 
+                padding: 0; border: none;
+                border-left: 1px solid var(--outline);
+            }
+        }
+
+        .nav-item { width: 56px; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 8px; cursor: pointer; color: var(--on-surface); opacity: 0.5; margin: 4px; }
+        .nav-item.active { background: var(--primary); color: #003061; opacity: 1; }
+        .icon { width: 24px; height: 24px; fill: currentColor; }
+    </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div class="nav-bar">
+    <div class="nav-item active" onclick="setSound('zen', this)"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg></div>
+    <div class="nav-item" onclick="setSound('spark', this)"><svg class="icon" viewBox="0 0 24 24"><path d="M1,21H23L12,2L1,21Z"/></svg></div>
+    <div class="nav-item" onclick="setSound('moog', this)"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18"/></svg></div>
+    <div class="nav-item" onclick="setSound('strings', this)"><svg class="icon" viewBox="0 0 24 24"><path d="M21,16.5V7.5L12,2L3,7.5V16.5L12,22L21,16.5Z"/></svg></div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let audioCtx, mainReverb, dryNode;
+let currentSound = 'zen';
+const NOTES_COUNT = 12, OCTAVES = 6, START_OCTAVE = 2, INTERVAL = 750, DECAY = 0.65;
+let ripples = [], activeTiles = [];
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        mainReverb = createReverbNode(2.5, 2.5);
+        dryNode = audioCtx.createGain(); 
+        dryNode.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function setSound(type, el) {
+    currentSound = type;
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    el.classList.add('active');
+    if (audioCtx) initAudio();
+}
+
+function createReverbNode(duration, dcy) {
+    const rate = audioCtx.sampleRate, length = rate * duration;
+    const buffer = audioCtx.createBuffer(2, length, rate);
+    for (let i = 0; i < 2; i++) {
+        const channel = buffer.getChannelData(i);
+        for (let j = 0; j < length; j++) channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / length, dcy);
+    }
+    const reverb = audioCtx.createConvolver();
+    reverb.buffer = buffer; reverb.connect(audioCtx.destination);
+    return reverb;
+}
+
+function playMoogStaccato(freq, volume, now) {
+    [0, 3, 7, 10].forEach(semi => {
+        const f = freq * Math.pow(2, semi / 12);
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'square'; osc.frequency.setValueAtTime(f, now);
+        g.gain.setValueAtTime(volume * 0.02, now); g.gain.setValueAtTime(0, now + 0.3); 
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.31);
+    });
+}
+
+function playStrings(freq, volume, now) {
+    [0, 0.005, -0.005].forEach(detune => {
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        const lfo = audioCtx.createOscillator();
+        const lfoG = audioCtx.createGain();
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq, now);
+        lfo.frequency.value = 5; lfoG.gain.value = freq * 0.015;
+        lfo.connect(lfoG); lfoG.connect(osc.frequency);
+        g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(volume * 0.03, now + 0.4);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
+        osc.connect(g); g.connect(dryNode); 
+        osc.start(); lfo.start(); osc.stop(now + 1.6); lfo.stop(now + 1.6);
+    });
+}
+
+function playSound(freq, volume) {
+    const now = audioCtx.currentTime;
+    const gain = audioCtx.createGain();
+    if (currentSound === 'moog') return playMoogStaccato(freq * 0.5, volume, now);
+    if (currentSound === 'strings') return playStrings(freq, volume, now);
+    const osc = audioCtx.createOscillator();
+    osc.type = currentSound === 'spark' ? 'sawtooth' : 'sine';
+    osc.frequency.setValueAtTime(freq, now);
+    const v = currentSound === 'zen' ? 0.7 : 0.4; 
+    gain.gain.setValueAtTime(volume * v, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+    osc.connect(gain); gain.connect(mainReverb);
+    osc.start(); osc.stop(now + 1.2);
+}
+
+function getSettings() {
+    const isLS = window.innerWidth > window.innerHeight;
+    const bar = 80;
+    const margin = 10; // ДОПОЛНИТЕЛЬНЫЙ ОТСТУП ОТ ПАНЕЛИ
+    const w = isLS ? window.innerWidth - bar - margin : window.innerWidth;
+    const h = isLS ? window.innerHeight : window.innerHeight - bar - margin;
+    return { isLS, w, h, cols: isLS ? NOTES_COUNT : OCTAVES, rows: isLS ? OCTAVES : NOTES_COUNT };
+}
+
+function drawGrid() {
+    const { w, h, cols, rows } = getSettings();
+    const sX = w / cols, sY = h / rows;
+    const padding = 3;
+    for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+            const isActive = activeTiles.find(t => t.x === x && t.y === y);
+            ctx.fillStyle = isActive ? `rgba(255,255,255,${isActive.a * 0.15})` : '#1a1a1a';
+            ctx.beginPath(); ctx.roundRect(x * sX + padding, y * sY + padding, sX - padding * 2, sY - padding * 2, 6); ctx.fill();
+            ctx.strokeStyle = isActive ? `rgba(255,255,255,${isActive.a * 0.3})` : '#252525'; ctx.stroke();
+        }
+    }
+}
+
+function trigger(cX, cY, vol, first = false) {
+    if (vol < 0.05) return;
+    const { isLS, w, h, cols, rows } = getSettings();
+    if (isLS && cX > w) return;
+    if (!isLS && cY > h) return;
+    const xIdx = Math.floor((cX / w) * cols), yIdx = Math.floor((cY / h) * rows);
+    if (first) activeTiles.push({x: xIdx, y: yIdx, a: 1.0});
+    
+    let freq;
+    if (isLS) {
+        const oIdx = rows - 1 - yIdx + START_OCTAVE;
+        const nIdx = xIdx;
+        freq = 440 * Math.pow(2, ((oIdx + 1) * 12 + nIdx - 69) / 12);
+    } else {
+        const oIdx = xIdx + START_OCTAVE;
+        const nIdx = NOTES_COUNT - 1 - yIdx;
+        freq = 440 * Math.pow(2, ((oIdx + 1) * 12 + nIdx - 69) / 12);
+    }
+
+    playSound(freq, vol);
+    ripples.push({ x: cX, y: cY, r: 0, alpha: vol, speed: currentSound === 'moog' ? 10 : 4, color: `hsla(${(isLS?cX/w:cY/h)*360}, 70%, 55%,` });
+    setTimeout(() => trigger(cX, cY, vol * DECAY), INTERVAL);
+}
+
+function handleInput(e) {
+    const ts = e.changedTouches || [e];
+    for (let t of ts) { initAudio(); trigger(t.clientX, t.clientY, 1.0, true); }
+}
+canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(e); }, {passive: false});
+canvas.addEventListener('mousedown', handleInput);
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function animate() {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    activeTiles.forEach((t, i) => { t.a *= 0.9; if (t.a < 0.01) activeTiles.splice(i, 1); });
+    drawGrid();
+    for (let i = ripples.length - 1; i >= 0; i--) {
+        const r = ripples[i]; r.r += r.speed; r.alpha *= 0.95;
+        ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+        ctx.fillStyle = r.color + r.alpha + ')'; ctx.fill();
+        if (r.alpha < 0.005) ripples.splice(i, 1);
+    }
+    requestAnimationFrame(animate);
+}
+animate();
+</script>
+</body>
+</html>
