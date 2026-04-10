@@ -6,18 +6,15 @@
     
     <title>Zenomat</title>
     
-    <!-- PWA и iOS теги -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Zenomat">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#1A1C1E">
 
-    <!-- Иконки: минималистичная волна (data:image/svg, без внешних запросов) -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%231A1C1E' stroke='%23D1E1FF' stroke-width='2'/%3E%3Cpath d='M30 50 Q40 35 50 50 T70 50' stroke='%23D1E1FF' fill='none' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
     <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%231A1C1E' stroke='%23D1E1FF' stroke-width='2'/%3E%3Cpath d='M30 50 Q40 35 50 50 T70 50' stroke='%23D1E1FF' fill='none' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 
-    <!-- Манифест PWA (полноценный, без data: URL, через blob) -->
     <script>
         (function() {
             const manifestObj = {
@@ -29,14 +26,12 @@
                 display: "standalone",
                 background_color: "#000000",
                 theme_color: "#1A1C1E",
-                icons: [
-                    {
-                        src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%231A1C1E' stroke='%23D1E1FF' stroke-width='2'/%3E%3Cpath d='M30 50 Q40 35 50 50 T70 50' stroke='%23D1E1FF' fill='none' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E",
-                        sizes: "512x512",
-                        type: "image/svg+xml",
-                        purpose: "any maskable"
-                    }
-                ]
+                icons: [{
+                    src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%231A1C1E' stroke='%23D1E1FF' stroke-width='2'/%3E%3Cpath d='M30 50 Q40 35 50 50 T70 50' stroke='%23D1E1FF' fill='none' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E",
+                    sizes: "512x512",
+                    type: "image/svg+xml",
+                    purpose: "any maskable"
+                }]
             };
             const blob = new Blob([JSON.stringify(manifestObj)], { type: 'application/manifest+json' });
             const manifestURL = URL.createObjectURL(blob);
@@ -73,7 +68,6 @@
 </div>
 
 <script>
-// Регистрация SW для PWA (без отдельного .js файла)
 if ('serviceWorker' in navigator) {
     const swCode = `self.addEventListener('install', e => self.skipWaiting()); self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));`;
     const swBlob = new Blob([swCode], { type: 'application/javascript' });
@@ -174,18 +168,62 @@ function getSettings() {
     return { isLS, w, h, cols: isLS ? NOTES_COUNT : OCTAVES, rows: isLS ? OCTAVES : NOTES_COUNT, marginSide, marginTopBottom };
 }
 
+// Правильное расположение чёрных клавиш (диезы/бемоли)
+// Индексы нот от 0 до 11 (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
+// Чёрные клавиши на индексах: 1 (C#), 3 (D#), 6 (F#), 8 (G#), 10 (A#)
+const BLACK_NOTE_INDICES = [1, 3, 6, 8, 10];
+
+function isAccidental(x, y) {
+    const { isLS } = getSettings();
+    if (isLS) {
+        // Ландшафт: горизонталь — ноты (0..11)
+        return BLACK_NOTE_INDICES.includes(x);
+    } else {
+        // Портрет: вертикаль — ноты (0..11), но отсчёт идёт снизу вверх
+        // y от 0 (верх) до 11 (низ), а ноты идут от B (внизу) до C (вверху)?
+        // В оригинальном коде в портрете: nIdx = NOTES_COUNT - 1 - yIdx
+        // То есть y=0 → нота B (индекс 11), y=11 → нота C (индекс 0)
+        // Поэтому чёрная клавиша будет, если (NOTES_COUNT - 1 - y) ∈ BLACK_NOTE_INDICES
+        const noteIdx = NOTES_COUNT - 1 - y;
+        return BLACK_NOTE_INDICES.includes(noteIdx);
+    }
+}
+
 function drawGrid() {
     const { w, h, cols, rows, marginSide, marginTopBottom } = getSettings();
     const sX = w / cols, sY = h / rows;
-    const innerGap = 3; 
+    const innerGap = 3;
+    
+    // Цвета: обычные на 12% светлее (#1a1a1a → #232327)
+    // чёрные клавиши на 12% темнее (#1a1a1a → #131315)
+    const lightColor = '#232327';
+    const darkColor = '#131315';
+    
     for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
             const isActive = activeTiles.find(t => t.x === x && t.y === y);
-            ctx.fillStyle = isActive ? `rgba(255,255,255,${isActive.a * 0.15})` : '#1a1a1a';
+            const isAcc = isAccidental(x, y);
+            
+            let bgColor;
+            if (isActive) {
+                bgColor = `rgba(255,255,255,${isActive.a * 0.15})`;
+            } else {
+                bgColor = isAcc ? darkColor : lightColor;
+            }
+            
+            ctx.fillStyle = bgColor;
             ctx.beginPath(); 
             ctx.roundRect(x * sX + innerGap + marginSide, y * sY + innerGap + marginTopBottom, sX - innerGap * 2, sY - innerGap * 2, 6); 
             ctx.fill();
-            ctx.strokeStyle = isActive ? `rgba(255,255,255,${isActive.a * 0.3})` : '#252525'; ctx.stroke();
+            
+            let strokeColor;
+            if (isActive) {
+                strokeColor = `rgba(255,255,255,${isActive.a * 0.3})`;
+            } else {
+                strokeColor = isAcc ? '#2a2a2e' : '#35353d';
+            }
+            ctx.strokeStyle = strokeColor;
+            ctx.stroke();
         }
     }
 }
