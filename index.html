@@ -3,21 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    
-    <!-- PWA ТРЕБОВАНИЯ -->
     <title>Zenomat</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Zenomat">
-    <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#1A1C1E">
 
-    <!-- ИКОНКИ -->
     <link rel="icon" type="image/png" href="https://flaticon.com">
     <link rel="apple-touch-icon" href="https://flaticon.com">
-
-    <!-- МАНИФЕСТ (JSON) -->
-    <link rel="manifest" href='data:application/manifest+json,{"name":"Zenomat Synth","short_name":"Zenomat","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#1A1C1E","icons":[{"src":"https://flaticon.com","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}'>
+    <link rel="manifest" href='data:application/manifest+json,{"name":"Zenomat","short_name":"Zenomat","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#1A1C1E","icons":[{"src":"https://flaticon.com","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}'>
 
     <style>
         :root { --primary: #D1E1FF; --surface: #1A1C1E; --on-surface: #E2E2E6; --outline: #44474E; }
@@ -45,17 +38,10 @@
 </div>
 
 <script>
-// SERVICE WORKER (Обеспечивает оффлайн работу и статус PWA)
 if ('serviceWorker' in navigator) {
-    const swCode = `
-        const CACHE_NAME = 'zenomat-v1';
-        self.addEventListener('install', e => self.skipWaiting());
-        self.addEventListener('fetch', e => {
-            e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-        });
-    `;
-    const blob = new Blob([swCode], {type: 'text/javascript'});
-    navigator.serviceWorker.register(URL.createObjectURL(blob));
+    const swCode = `self.addEventListener('install', e => self.skipWaiting()); self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));`;
+    const swBlob = new Blob([swCode], { type: 'application/javascript' });
+    navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
 }
 
 const canvas = document.getElementById('canvas');
@@ -95,7 +81,7 @@ function createReverbNode(duration, dcy) {
 }
 
 function playMoogStaccato(freq, volume, now) {
-    [0, 3, 7, 10].forEach(semi => {
+   [0, 3, 7, 10].forEach(semi => {
         const f = freq * Math.pow(2, semi / 12);
         const osc = audioCtx.createOscillator();
         const g = audioCtx.createGain();
@@ -139,22 +125,28 @@ function playSound(freq, volume) {
 
 function getSettings() {
     const isLS = window.innerWidth > window.innerHeight;
-    const bar = 80, margin = 4; 
-    const w = isLS ? window.innerWidth - bar - (margin * 2) : window.innerWidth - (margin * 2);
-    const h = isLS ? window.innerHeight - (margin * 2) : window.innerHeight - bar - (margin * 2);
+    const bar = 80;
+    const margin = 4; // МИНИМАЛЬНЫЙ ОТСТУП
+    
+    const totalW = isLS ? window.innerWidth - bar : window.innerWidth;
+    const totalH = isLS ? window.innerHeight : window.innerHeight - bar;
+    
+    const w = totalW - (margin * 2);
+    const h = totalH - (margin * 2);
+    
     return { isLS, w, h, cols: isLS ? NOTES_COUNT : OCTAVES, rows: isLS ? OCTAVES : NOTES_COUNT, margin };
 }
 
 function drawGrid() {
     const { w, h, cols, rows, margin } = getSettings();
     const sX = w / cols, sY = h / rows;
-    const cellPad = 2;
+    const innerGap = 3; 
     for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
             const isActive = activeTiles.find(t => t.x === x && t.y === y);
             ctx.fillStyle = isActive ? `rgba(255,255,255,${isActive.a * 0.15})` : '#1a1a1a';
             ctx.beginPath(); 
-            ctx.roundRect(x * sX + cellPad + margin, y * sY + cellPad + margin, sX - cellPad * 2, sY - cellPad * 2, 4); 
+            ctx.roundRect(x * sX + innerGap + margin, y * sY + innerGap + margin, sX - innerGap * 2, sY - innerGap * 2, 6); 
             ctx.fill();
             ctx.strokeStyle = isActive ? `rgba(255,255,255,${isActive.a * 0.3})` : '#252525'; ctx.stroke();
         }
