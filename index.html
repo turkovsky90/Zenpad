@@ -3,14 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
     <title>Zenomat</title>
+    
+    <!-- PWA и iOS теги -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Zenomat">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#1A1C1E">
 
+    <!-- Внешняя иконка -->
     <link rel="icon" type="image/png" href="https://flaticon.com">
     <link rel="apple-touch-icon" href="https://flaticon.com">
-    <link rel="manifest" href='data:application/manifest+json,{"name":"Zenomat","short_name":"Zenomat","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#1A1C1E","icons":[{"src":"https://flaticon.com","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}'>
+
+    <!-- Полный Манифест -->
+    <link rel="manifest" href='data:application/manifest+json,{"name":"Zenomat Synth","short_name":"Zenomat","description":"Ambient Sound Matrix","start_url":"./index.html","scope":"./","display":"standalone","background_color":"#000000","theme_color":"#1A1C1E","icons":[{"src":"https://flaticon.com","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}'>
 
     <style>
         :root { --primary: #D1E1FF; --surface: #1A1C1E; --on-surface: #E2E2E6; --outline: #44474E; }
@@ -38,6 +46,7 @@
 </div>
 
 <script>
+// Регистрация SW для PWA
 if ('serviceWorker' in navigator) {
     const swCode = `self.addEventListener('install', e => self.skipWaiting()); self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));`;
     const swBlob = new Blob([swCode], { type: 'application/javascript' });
@@ -81,7 +90,7 @@ function createReverbNode(duration, dcy) {
 }
 
 function playMoogStaccato(freq, volume, now) {
-   [0, 3, 7, 10].forEach(semi => {
+    [0, 3, 7, 10].forEach(semi => {
         const f = freq * Math.pow(2, semi / 12);
         const osc = audioCtx.createOscillator();
         const g = audioCtx.createGain();
@@ -126,19 +135,20 @@ function playSound(freq, volume) {
 function getSettings() {
     const isLS = window.innerWidth > window.innerHeight;
     const bar = 80;
-    const margin = 4; // МИНИМАЛЬНЫЙ ОТСТУП
+    const marginSide = 0; // Боковые отступы убраны в ноль (уменьшены на 4 пикселя)
+    const marginTopBottom = 4; // Отступы сверху/снизу
     
     const totalW = isLS ? window.innerWidth - bar : window.innerWidth;
     const totalH = isLS ? window.innerHeight : window.innerHeight - bar;
     
-    const w = totalW - (margin * 2);
-    const h = totalH - (margin * 2);
+    const w = totalW - (marginSide * 2);
+    const h = totalH - (marginTopBottom * 2);
     
-    return { isLS, w, h, cols: isLS ? NOTES_COUNT : OCTAVES, rows: isLS ? OCTAVES : NOTES_COUNT, margin };
+    return { isLS, w, h, cols: isLS ? NOTES_COUNT : OCTAVES, rows: isLS ? OCTAVES : NOTES_COUNT, marginSide, marginTopBottom };
 }
 
 function drawGrid() {
-    const { w, h, cols, rows, margin } = getSettings();
+    const { w, h, cols, rows, marginSide, marginTopBottom } = getSettings();
     const sX = w / cols, sY = h / rows;
     const innerGap = 3; 
     for (let y = 0; y < rows; y++) {
@@ -146,7 +156,7 @@ function drawGrid() {
             const isActive = activeTiles.find(t => t.x === x && t.y === y);
             ctx.fillStyle = isActive ? `rgba(255,255,255,${isActive.a * 0.15})` : '#1a1a1a';
             ctx.beginPath(); 
-            ctx.roundRect(x * sX + innerGap + margin, y * sY + innerGap + margin, sX - innerGap * 2, sY - innerGap * 2, 6); 
+            ctx.roundRect(x * sX + innerGap + marginSide, y * sY + innerGap + marginTopBottom, sX - innerGap * 2, sY - innerGap * 2, 6); 
             ctx.fill();
             ctx.strokeStyle = isActive ? `rgba(255,255,255,${isActive.a * 0.3})` : '#252525'; ctx.stroke();
         }
@@ -155,8 +165,8 @@ function drawGrid() {
 
 function trigger(cX, cY, vol, first = false) {
     if (vol < 0.05) return;
-    const { isLS, w, h, cols, rows, margin } = getSettings();
-    const relX = cX - margin, relY = cY - margin;
+    const { isLS, w, h, cols, rows, marginSide, marginTopBottom } = getSettings();
+    const relX = cX - marginSide, relY = cY - marginTopBottom;
     if (relX < 0 || relY < 0 || relX > w || relY > h) return;
     const xIdx = Math.floor((relX / w) * cols), yIdx = Math.floor((relY / h) * rows);
     if (first) activeTiles.push({x: xIdx, y: yIdx, a: 1.0});
